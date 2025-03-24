@@ -9,7 +9,7 @@ class GraphDB:
         self.driver.close()
 
     def create_node(self, node_id, name, kind):
-        # Allow labels that start with a letter and contain only letters, numbers, or underscores.
+        # Allow labels that start with a letter and contain only letters, numbers, or underscores. 
         if not re.match(r"^[A-Za-z][A-Za-z0-9_]*$", kind):
             raise ValueError(f"Invalid kind label: {kind}")
         
@@ -33,21 +33,37 @@ class GraphDB:
 
     def query1(self, disease_id):
         with self.driver.session() as session:
-            result = session.run(
-                """
-                MATCH (d:Disease { id: $disease_id })
-                OPTIONAL MATCH (d)<-[:TREATS|PALLIATES]-(c:Compound)
-                OPTIONAL MATCH (d)-[:CAUSES]->(g:Gene)
-                OPTIONAL MATCH (d)-[:OCCURS_IN|LOCALIZES_TO]->(l)
+            # First verify the disease exists
+            verify = session.run("""
+                MATCH (d:Disease {id: $disease_id}) 
+                RETURN count(d) > 0 as exists
+            """, disease_id=disease_id).single()
+            
+            if not verify or not verify["exists"]:
+                print(f"Disease {disease_id} not found in database")
+                return None
+
+            # Main query using correct relationship types
+            result = session.run("""
+                MATCH (d:Disease {id: $disease_id})
+                OPTIONAL MATCH (d)<-[r:CtD|CpD]-(c:Compound)
+                OPTIONAL MATCH (d)-[r2:DdG]-(g:Gene)
+                OPTIONAL MATCH (d)-[r3:DlA]->(l:Anatomy)
                 RETURN d.name AS disease_name,
-                       collect(DISTINCT c.name) AS drug_names,
-                       collect(DISTINCT g.name) AS gene_names,
-                       collect(DISTINCT l.name) AS locations
-                """,
-                disease_id=disease_id
-            )
+                    collect(DISTINCT c.name) AS drug_names,
+                    collect(DISTINCT g.name) AS gene_names,
+                    collect(DISTINCT l.name) AS locations
+            """, disease_id=disease_id)
+            
             record = result.single()
-            return record
+            if record:
+                return {
+                    "disease_name": record["disease_name"],
+                    "drug_names": record["drug_names"],
+                    "gene_names": record["gene_names"],
+                    "locations": record["locations"]
+                }
+            return None
 
     def query2(self, new_disease_id):
         with self.driver.session() as session:
