@@ -6,7 +6,7 @@ import csv
 from main import create_db, query1, query2
 
 def main():
-    st.title("HetioNet Database Explorer")
+    st.title("Big Data Project 1: HetioNet DB Implementation")
     st.sidebar.header("Configuration")
 
     # Database connection settings
@@ -76,20 +76,65 @@ def main():
 
     # Query 2 Tab
     with tab3:
-        st.header("Potential Drugs Query")
-        disease_id_q2 = st.text_input("Enter Disease ID for Drug Query", "Disease::DOID:2377")
+        st.header("Drug Repurposing Analysis")
+        st.markdown("""
+        This analysis finds potential new drugs for a disease by:
+        1. Identifying anatomical locations affected by the disease
+        2. Finding genes that are up/down regulated in those locations
+        3. Discovering drugs with opposite effects on those genes
+        4. Excluding drugs that are already known treatments
+        """)
         
-        if st.button("Run Query 2"):
+        disease_id_q2 = st.text_input("Enter Disease ID", "Disease::DOID:1324")
+        
+        if st.button("Find Potential Drugs"):
             try:
-                with st.spinner("Finding potential drugs..."):
+                with st.spinner("Analyzing drug-gene-disease relationships..."):
                     drugs = query2(disease_id_q2, neo4j_uri)
+                
                 if drugs:
-                    st.subheader("Potential Drugs")
-                    st.write(drugs)
+                    st.success(f"Found {len(drugs)} potential drugs!")
+                    
+                    # Create tabs for different views
+                    results_tab1, results_tab2 = st.tabs(["📊 Analysis", "📋 Full Results"])
+                    
+                    with results_tab1:
+                        # Show top 10 drugs in a bar chart
+                        df_top10 = pd.DataFrame(drugs[:10], columns=["Drug"])
+                        df_top10["Rank"] = range(1, len(df_top10) + 1)
+                        
+                        st.subheader("Top 10 Drug Candidates")
+                        st.bar_chart(df_top10.set_index("Drug"))
+                        
+                        # Show top 10 in a nice formatted list
+                        st.markdown("### Detailed Top 10")
+                        for i, drug in enumerate(drugs[:10], 1):
+                            st.markdown(f"**{i}. {drug}**")
+                    
+                    with results_tab2:
+                        # Show full results in a searchable table
+                        df_all = pd.DataFrame(drugs, columns=["Drug"])
+                        st.dataframe(df_all)
+                        
+                        # Add download button
+                        csv = df_all.to_csv(index=False)
+                        st.download_button(
+                            label="Download Complete Results",
+                            data=csv,
+                            file_name="potential_drugs.csv",
+                            mime="text/csv"
+                        )
                 else:
                     st.warning("No potential drugs found for this disease")
+                    st.info("""
+                    This could mean:
+                    - The disease ID doesn't exist
+                    - No anatomical locations are associated
+                    - No genes with opposite regulation patterns were found
+                    """)
             except Exception as e:
-                st.error(f"Error executing query: {str(e)}")
+                st.error(f"Error analyzing disease: {str(e)}")
+                st.info("Please verify the disease ID and try again")
 
     # Footer
     st.sidebar.markdown("---")
